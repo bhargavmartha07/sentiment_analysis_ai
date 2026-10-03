@@ -25,7 +25,7 @@ Prerequisites: Docker Desktop with Compose v2. Nothing else — no Python, no
 TensorFlow, no broker or database installation on the host.
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/bhargavmartha07/sentiment-analysis-microservice.git
 cd sentiment-analysis-microservice
 docker compose up -d --build      # first build downloads ~600 MB of wheels
 docker compose ps                 # wait until all four services are healthy
