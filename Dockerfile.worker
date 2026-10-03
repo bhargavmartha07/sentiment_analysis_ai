@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1
+# ---------------------------------------------------------------------------
+# Sentiment Analysis Worker service
+# ---------------------------------------------------------------------------
+# The worker loads the identical model artifact as the API, so the two
+# containers are intentionally built from the same base and dependency set -
+# Docker reuses the cached layers and the total build cost stays that of one
+# image.
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    TF_CPP_MIN_LOG_LEVEL=2
+
+WORKDIR /app
+
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+
+COPY app ./app
+COPY scripts ./scripts
+COPY tests ./tests
+COPY pytest.ini ./
+
+# The heartbeat file is the worker's liveness signal, so it needs a writable
+# location owned by the unprivileged runtime user.
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /tmp/sentiment-worker \
+    && chown -R appuser:appuser /app /tmp/sentiment-worker
+ENV WORKER_HEARTBEAT_PATH=/tmp/sentiment-worker/heartbeat.json
+USER appuser
+
+CMD ["python", "-m", "app.worker.consumer"]

@@ -1,0 +1,196 @@
+{
+  "info": {
+    "_postman_id": "b1f0f0d2-4c6a-4f0e-9a1e-sentiment0001",
+    "name": "Sentiment Analysis Microservice",
+    "description": "Collection for the sentiment analysis microservice.\n\nStart the stack first:\n\n    docker compose up -d --build\n\nThe async request script stores the returned job_id in a collection variable, so\n`GET result` can be run straight after `POST async (queue job)`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "job_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] },
+            "description": "Always 200 while the process serves traffic."
+          }
+        },
+        {
+          "name": "Readiness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/health/ready", "host": ["{{base_url}}"], "path": ["health", "ready"] },
+            "description": "Probes model, MongoDB and RabbitMQ. 503 if any is down."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sentiment",
+      "item": [
+        {
+          "name": "POST sync (positive text)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"I love this product!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/sync",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentiment", "sync"]
+            },
+            "description": "Synchronous inference. Returns 200 with text/sentiment/score."
+          }
+        },
+        {
+          "name": "POST sync (negative text)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"This movie was terrible.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/sync",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentiment", "sync"]
+            }
+          }
+        },
+        {
+          "name": "POST sync (invalid - empty text, expect 400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"text\": \"   \"\n}" },
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/sync",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentiment", "sync"]
+            },
+            "description": "Whitespace-only input is rejected with 400 INVALID_INPUT."
+          }
+        },
+        {
+          "name": "POST batch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texts\": [\"Great product!\", \"Awful waste of money.\", \"It was fine.\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/batch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentiment", "batch"]
+            },
+            "description": "One forward pass for up to 32 texts."
+          }
+        },
+        {
+          "name": "POST async (queue job)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', function () { pm.response.to.have.status(202); });",
+                  "const body = pm.response.json();",
+                  "pm.test('job_id is a uuid', function () { pm.expect(body.job_id).to.match(/^[0-9a-f-]{36}$/i); });",
+                  "pm.collectionVariables.set('job_id', body.job_id);",
+                  "console.log('job_id =', body.job_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"This movie was terrible.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/async",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentiment", "async"]
+            },
+            "description": "Publishes to RabbitMQ and returns 202 with a job_id."
+          }
+        },
+        {
+          "name": "GET result (poll until 200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/results/{{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentiment", "results", "{{job_id}}"]
+            },
+            "description": "Run `POST async (queue job)` first. 404 until the worker persists the result, then 200. Repeat until 200."
+          }
+        },
+        {
+          "name": "GET result (unknown id, expect 404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/results/00000000-0000-0000-0000-000000000000",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentiment", "results", "00000000-0000-0000-0000-000000000000"]
+            }
+          }
+        },
+        {
+          "name": "GET result (malformed id, expect 400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/results/not-a-uuid",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentiment", "results", "not-a-uuid"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Docs",
+      "item": [
+        {
+          "name": "OpenAPI schema",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/openapi.json", "host": ["{{base_url}}"], "path": ["openapi.json"] }
+          }
+        },
+        {
+          "name": "Swagger UI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/docs", "host": ["{{base_url}}"], "path": ["docs"] }
+          }
+        }
+      ]
+    }
+  ]
+}

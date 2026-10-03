@@ -1,0 +1,15 @@
+# ---------------------------------------------------------------------------
+# Test and lint dependencies.
+#
+# Installed alongside requirements.txt in both images so the documented
+# in-container commands work:
+#   docker compose exec api    python -m ruff check app tests scripts
+#   docker compose exec api    python -m pytest tests/unit/api_tests.py
+#   docker compose exec worker python -m pytest tests/unit/service_tests.py
+#   docker compose exec api    python -m pytest tests/integration/integration_tests.py
+# ---------------------------------------------------------------------------
+pytest==8.3.4
+pytest-cov==6.0.0
+httpx==0.28.1
+mongomock==4.3.0
+ruff==0.8.6

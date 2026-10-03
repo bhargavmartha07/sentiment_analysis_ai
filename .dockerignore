@@ -1,0 +1,38 @@
+# --- Version control -------------------------------------------------------
+.git
+.gitignore
+.github
+*.md
+!README.md
+
+# --- Local configuration and secrets ---------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- Model artefacts --------------------------------------------------------
+# The trained model (~1 MB) and its vocabulary ARE committed on purpose: the
+# repository must be runnable with `docker compose up` without a training step.
+# Only intermediate training scratch is ignored.
+app/models/*.ckpt
+app/models/*.weights.h5
+checkpoints/
+
+# --- Local tooling ----------------------------------------------------------
+.idea/
+.vscode/
+.DS_Store
+*.log

@@ -1,0 +1,11 @@
+# Normalise line endings in the repository. Containers and Make run on Linux,
+# so a CRLF Makefile or script checked out on Windows would break for everyone
+# else. Keep the real repository LF and let Git convert on checkout per-OS.
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Trained weights are binary. Everything else (including word_index.json and
+# model_metadata.json) stays text so diffs stay reviewable.
+*.h5 binary

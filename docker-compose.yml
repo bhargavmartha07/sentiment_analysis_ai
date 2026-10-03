@@ -1,0 +1,135 @@
+# ---------------------------------------------------------------------------
+# Sentiment Analysis Microservice - single-command stack:
+#     docker compose up -d --build
+#
+# Every setting below is sourced from the environment with an inline default, so
+# the stack boots with zero configuration. Compose automatically reads a local
+# `.env` file for these substitutions - copy `.env.example` to `.env` to
+# override any of them.
+# ---------------------------------------------------------------------------
+
+name: sentiment-microservice
+
+# Shared configuration for the two application services. Each service keeps its
+# own image tag and `build.dockerfile` because they are separate images;
+# everything else (environment, dependencies, health policy) is identical by
+# design, and Docker reuses the shared dependency layers between the two builds.
+x-app-common: &app-common
+  restart: unless-stopped
+  env_file:
+    - path: .env
+      required: false
+  environment: &app-environment
+    ENVIRONMENT: ${ENVIRONMENT:-development}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    LOG_FORMAT: ${LOG_FORMAT:-json}
+
+    RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+    RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+    RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+    RABBITMQ_PASS: ${RABBITMQ_PASS:-guest}
+    RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+    RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-sentiment.exchange}
+    RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:-sentiment.jobs}
+    RABBITMQ_ROUTING_KEY: ${RABBITMQ_ROUTING_KEY:-sentiment.analyze}
+    RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-sentiment.dlx}
+    RABBITMQ_DEAD_LETTER_QUEUE: ${RABBITMQ_DEAD_LETTER_QUEUE:-sentiment.jobs.dlq}
+    RABBITMQ_PREFETCH_COUNT: ${RABBITMQ_PREFETCH_COUNT:-8}
+
+    MONGO_URI: ${MONGO_URI:-mongodb://mongodb:27017/sentiment_db}
+    MONGO_DB_NAME: ${MONGO_DB_NAME:-sentiment_db}
+    MONGO_COLLECTION: ${MONGO_COLLECTION:-sentiment_results}
+
+    MODEL_PATH: ${MODEL_PATH:-app/models/sentiment_model.h5}
+    WORD_INDEX_PATH: ${WORD_INDEX_PATH:-app/models/word_index.json}
+    MODEL_METADATA_PATH: ${MODEL_METADATA_PATH:-app/models/model_metadata.json}
+    POSITIVE_THRESHOLD: ${POSITIVE_THRESHOLD:-0.5}
+  depends_on:
+    rabbitmq:
+      condition: service_healthy
+    mongodb:
+      condition: service_healthy
+
+services:
+  # ----------------------------------------------------------------- API
+  api:
+    <<: *app-common
+    image: sentiment-api:${APP_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: sentiment-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # -------------------------------------------------------------- WORKER
+  worker:
+    <<: *app-common
+    image: sentiment-worker:${APP_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: sentiment-worker
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      api:
+        condition: service_started
+    environment:
+      <<: *app-environment
+      WORKER_MAX_RETRIES: ${WORKER_MAX_RETRIES:-3}
+      WORKER_HEARTBEAT_PATH: ${WORKER_HEARTBEAT_PATH:-/tmp/sentiment-worker/heartbeat.json}
+      WORKER_HEARTBEAT_STALE_SECONDS: ${WORKER_HEARTBEAT_STALE_SECONDS:-60}
+    healthcheck:
+      test: ["CMD-SHELL", "python -m app.worker.consumer --healthcheck || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 4
+      start_period: 40s
+
+  # ------------------------------------------------------------ RABBITMQ
+  rabbitmq:
+    image: rabbitmq:${RABBITMQ_IMAGE_TAG:-3.13-management-alpine}
+    container_name: sentiment-rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ------------------------------------------------------------- MONGODB
+  mongodb:
+    image: mongo:${MONGODB_IMAGE_TAG:-7.0}
+    container_name: sentiment-mongodb
+    ports:
+      - "${MONGODB_PORT:-27017}:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'quit(db.adminCommand({ ping: 1 }).ok ? 0 : 2)' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  mongodb_data:
+  rabbitmq_data:

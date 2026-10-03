@@ -1,0 +1,28 @@
+{
+  "model_file": "sentiment_model.h5",
+  "framework": "tensorflow 2.15.1",
+  "architecture": "Embedding(32, mask_zero) -> LSTM(64) -> Dense(16, relu) -> Dense(1, sigmoid)",
+  "dataset": "IMDB Large Movie Review Dataset (keras.datasets.imdb)",
+  "vocab_size": 20000,
+  "max_len": 200,
+  "pad_id": 0,
+  "start_id": 1,
+  "oov_id": 2,
+  "index_from": 3,
+  "serving_path_accuracy": 0.836,
+  "epochs_completed": 5,
+  "batch_size": 64,
+  "seed": 42,
+  "train_seconds": 144.6,
+  "metrics": {
+    "test_loss": 0.5026,
+    "test_accuracy": 0.8413,
+    "test_precision": 0.8587,
+    "test_recall": 0.817,
+    "test_f1": 0.8373,
+    "best_val_accuracy": 0.8653
+  },
+  "parameter_count": 665889,
+  "positive_label": "positive (label 1)",
+  "negative_label": "negative (label 0)"
+}

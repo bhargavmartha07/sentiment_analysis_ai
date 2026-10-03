@@ -1,0 +1,29 @@
+# ---------------------------------------------------------------------------
+# Sentiment Analysis Microservice - runtime dependencies (API + worker)
+# Pinned for reproducible Docker builds. Python 3.11.
+# ---------------------------------------------------------------------------
+
+# --- Web layer -------------------------------------------------------------
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+
+# --- Messaging -------------------------------------------------------------
+# pika is the reference RabbitMQ client. The blocking consumer semantics with
+# explicit ack/nack are exactly what a durable work-queue consumer needs.
+pika==1.3.2
+
+# --- Persistence -----------------------------------------------------------
+pymongo==4.10.1
+
+# --- ML --------------------------------------------------------------------
+# tensorflow-cpu keeps the image ~2GB smaller than the GPU build; this
+# workload is latency-insensitive and batching well under a millisecond of
+# arithmetic per sample.
+tensorflow-cpu==2.15.1
+# TensorFlow 2.15 is not compatible with the NumPy 2.x ABI.
+numpy==1.26.4
+
+# --- Observability / misc --------------------------------------------------
+requests==2.32.3

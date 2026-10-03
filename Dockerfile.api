@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1
+# ---------------------------------------------------------------------------
+# Sentiment Analysis API service
+# ---------------------------------------------------------------------------
+# Slim CPU-only TensorFlow keeps the image roughly half the size of the GPU
+# build; inference on a 200-token sequence takes single-digit milliseconds on
+# CPU, so a GPU would add build complexity and image weight for no real gain.
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    TF_CPP_MIN_LOG_LEVEL=2 \
+    MPLCONFIGDIR=/tmp/matplotlib
+
+WORKDIR /app
+
+# curl is used by the compose HEALTHCHECK below.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Dependencies are installed before the source so that code edits do not
+# invalidate the (expensive) TensorFlow layer in the Docker cache.
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+
+COPY app ./app
+COPY scripts ./scripts
+COPY tests ./tests
+COPY pytest.ini ./
+
+# Run as an unprivileged user; /app is read-only for the service at runtime.
+RUN useradd --create-home --uid 10001 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8000
+
+CMD ["python", "-m", "app.main"]
